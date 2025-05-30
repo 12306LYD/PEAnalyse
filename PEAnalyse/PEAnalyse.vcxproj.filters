@@ -5,18 +5,37 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="头文件">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
     <Filter Include="资源文件">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{0df0add9-99ef-4415-a10b-b8975870cf2f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Utils">
+      <UniqueIdentifier>{a79fe2b0-e703-4d2f-a1b1-a743533b0974}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Implement">
+      <UniqueIdentifier>{e4db6e4a-aad1-4140-b985-118cb4bab17b}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PEAnalyse.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\Utils\Utils.cpp">
+      <Filter>Source\Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Implement\ParseBase.cpp">
+      <Filter>Source\Implement</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Source\Utils\Utils.h">
+      <Filter>Source\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\Implement\ParseBase.h">
+      <Filter>Source\Implement</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
