@@ -20,7 +20,22 @@ public:
 	void DataParse();
 
 private:
+	//解析Dos头
+	void ParseDosHeader();
+	//解析Nt头(包括文件头、拓展头)
+	void ParseNtHeader();
+	
+	//解析数据目录表(具体解析导入表 导出表 资源表 重定位表等)
+	void ParseDataDirectoryTable();
 
+	void ParseExportTable();
+	void ParseImportTable();
+	void ParseRscTable();
+	void ParseRelocRable();
+	void ParseTlsTable();
+	
+	//解析区段表
+	void ParseSectionHeaders();
 
 public:
 	//保存文件路径信息
@@ -44,6 +59,10 @@ private:
 	//保存指向SectionHeader首地址的指针
 	IMAGE_SECTION_HEADER* m_pSectionHeaders;
 
+	//保存数据目录表的个数
+	DWORD m_DataDirectoryNum;
+	//保存指向数据目录表的指针
+	IMAGE_DATA_DIRECTORY* m_pDataDirectory;
 
 };
 

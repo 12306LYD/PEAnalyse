@@ -138,7 +138,7 @@ typedef struct _IMAGE_SECTION_HEADER {
             DWORD   PhysicalAddress;
             DWORD   VirtualSize;
     } Misc;
-    DWORD   VirtualAddress;                   节区的 RVA 地址
+    DWORD   VirtualAddress;                   节的 RVA 地址
     DWORD   SizeOfRawData;                    在文件中对齐后的尺寸
     DWORD   PointerToRawData;                 在文件中的偏移量    对于可执行镜像文件，这个字段必须是IMAGE_OPTIONAL_HEADER.FileAlignment的倍数。
     DWORD   PointerToRelocations;            在OBJ文件中使用，重定位的偏移
