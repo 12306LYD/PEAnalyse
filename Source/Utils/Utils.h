@@ -32,11 +32,13 @@ namespace Utils{
 	// IMAGE_NT_HEADERS64 x64
 	LPVOID GetPeNtheader(LPVOID FileBuff);
 
+	//获取文件头首地址
+	LPVOID GetPeFileHeader(LPVOID FileBuff);
+
 	//获取节区头Sectionheader首地址
 	LPVOID GetPeSectionHeader(LPVOID FileBase);
 
-
-
+	DWORD RvaToFoa(LPVOID FileBase,DWORD Rva);
 }
 
 

@@ -80,8 +80,22 @@ bool ParseBase::InitFileInfo(std::wstring FilePath)
     return TRUE;
 }
 
-void ParseBase::Parse()
+void ParseBase::DatCollection()
 {
-
-    return;
 }
+
+void ParseBase::DataParse()
+{
+}
+
+
+
+
+
+
+
+
+
+
+
+
