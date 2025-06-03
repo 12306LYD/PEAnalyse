@@ -143,20 +143,57 @@ LPVOID Utils::GetPeSectionHeader(LPVOID FileBase)
         return NULL;
     }
     // 获取NT头
+    //先使用 PIMAGE_NT_HEADERS 获取信息 此时32 和64 位没有区别（未涉及到拓展头信息）
     PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)GetPeNtheader(FileBase);
     if (pNtHeaders==NULL)
     {
         return NULL;
     }
-    // 计算节区头位置
-    // 首先确定可选头的大小
-    WORD sizeOfOptionalHeader = pNtHeaders->FileHeader.SizeOfOptionalHeader;
-    PIMAGE_SECTION_HEADER pSectionHeader = (PIMAGE_SECTION_HEADER)(
-        (BYTE*)pNtHeaders +
-        sizeof(IMAGE_NT_HEADERS) -
-        sizeof(IMAGE_OPTIONAL_HEADER) +
-        sizeOfOptionalHeader
-        );
+   
+    // 判断是32位还是64位
+    bool is64Bit = false;
+    if (pNtHeaders->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
+        is64Bit = true;
+    }
+    else if (pNtHeaders->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
+        is64Bit = false;
+    }
+    else
+    {
+        //位置的机器类型
+        return NULL;
+    }
+
+    //获取拓展头数据大小 64和32位程序需要进行区分
+    DWORD sizeOfOptionalHeader = 0;
+    PIMAGE_SECTION_HEADER pSectionHeader = NULL;
+    if (is64Bit)
+    {
+        //64位程序
+        //先获取拓展头数据大小
+        sizeOfOptionalHeader = ((PIMAGE_NT_HEADERS64)pNtHeaders)->FileHeader.SizeOfOptionalHeader;
+        //再计算节区头位置
+        pSectionHeader = (PIMAGE_SECTION_HEADER)(
+            (BYTE*)pNtHeaders +
+            sizeof(IMAGE_NT_HEADERS64) -
+            sizeof(IMAGE_OPTIONAL_HEADER64) +
+            sizeOfOptionalHeader
+            );
+    }
+    else
+    {
+        //32位程序
+        //先获取拓展头数据大小
+        sizeOfOptionalHeader = ((PIMAGE_NT_HEADERS32)pNtHeaders)->FileHeader.SizeOfOptionalHeader;
+        // 计算节区头位置
+        pSectionHeader = (PIMAGE_SECTION_HEADER)(
+            (BYTE*)pNtHeaders +
+            sizeof(IMAGE_NT_HEADERS32) -
+            sizeof(IMAGE_OPTIONAL_HEADER32) +
+            sizeOfOptionalHeader
+            );
+    }
+    
     return pSectionHeader;
 }
 

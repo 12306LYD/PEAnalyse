@@ -24,12 +24,15 @@ namespace Utils{
 	// -1 打开文件失败 0 非PE格式文件
 	//  1 X86 位程序  2 X64 
 	int FileInfoCheck(std::wstring FilePath);
-	//获取DOS Header
+	//获取DOS Header首地址
 	LPVOID GetPeDosHeader(LPVOID FileBuff);
-	//获取 NT header
+	//获取 NT header首地址
+	//返回的指针是LPVOID  需要根据文件的位数 x86 还是X64 使用不同的结构体进行解析
+	// IMAGE_NT_HEADERS32 x86
+	// IMAGE_NT_HEADERS64 x64
 	LPVOID GetPeNtheader(LPVOID FileBuff);
 
-	//获取Sectionheader
+	//获取节区头Sectionheader首地址
 	LPVOID GetPeSectionHeader(LPVOID FileBase);
 
 

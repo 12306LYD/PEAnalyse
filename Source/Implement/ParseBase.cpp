@@ -4,8 +4,9 @@
 ParseBase::ParseBase()
 {
     m_FileType = 0;
-    m_FileBuff = NULL;
+    m_pFileBuff = NULL;
     m_FileSize = 0;
+    m_FilePath = L"";
 }
 
 ParseBase::~ParseBase()
@@ -14,7 +15,7 @@ ParseBase::~ParseBase()
 
 bool ParseBase::InitFileInfo(std::wstring FilePath)
 {
-
+    
     m_FileType = Utils::FileInfoCheck(FilePath);
     if (m_FileType!= FILE_TYPE_X86_PE&& m_FileType!= FILE_TYPE_X64_PE)
     {
@@ -48,18 +49,18 @@ bool ParseBase::InitFileInfo(std::wstring FilePath)
         return FALSE;
     }
     // 分配内存
-    m_FileBuff = new BYTE[dwFileSize]{};
-    if (m_FileBuff == NULL) {
+    m_pFileBuff = new BYTE[dwFileSize]{};
+    if (m_pFileBuff == NULL) {
         wprintf(L"内存分配失败\n");
         CloseHandle(hFile);
         return FALSE;
     }
     // 读取文件内容
-    if (!ReadFile(hFile, m_FileBuff, dwFileSize, &dwBytesRead, NULL))
+    if (!ReadFile(hFile, m_pFileBuff, dwFileSize, &dwBytesRead, NULL))
     {
         wprintf(L"读取文件失败, 错误代码: %d\n", GetLastError());
-        delete []m_FileBuff;
-        m_FileBuff = NULL;
+        delete []m_pFileBuff;
+        m_pFileBuff = NULL;
         CloseHandle(hFile);
         return FALSE;
     }
@@ -67,8 +68,8 @@ bool ParseBase::InitFileInfo(std::wstring FilePath)
     if (dwBytesRead != dwFileSize)
     {
         wprintf(L"读取的字节数不匹配\n");
-        delete[]m_FileBuff;
-        m_FileBuff = NULL;
+        delete[]m_pFileBuff;
+        m_pFileBuff = NULL;
         CloseHandle(hFile);
         return FALSE;
     }

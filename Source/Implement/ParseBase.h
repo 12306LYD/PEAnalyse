@@ -19,12 +19,14 @@ public:
 
 
 public:
+	//保存文件路径信息
+	std::wstring m_FilePath;
 	//保存文件类型
 	int m_FileType;
-	//保存读取文件内容的起始地址
-	LPVOID m_FileBuff;
 	//保存文件大小(字节为单位)
 	DWORD64 m_FileSize;
+	//保存读取文件内容的起始地址
+	LPVOID m_pFileBuff;
 
 };
 
