@@ -37,5 +37,8 @@
     <ClInclude Include="..\Source\Implement\ParseBase.h">
       <Filter>Source\Implement</Filter>
     </ClInclude>
+    <ClInclude Include="..\Source\Implement\PeStructAnalyse.h">
+      <Filter>Source\Implement</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -82,10 +82,34 @@ bool ParseBase::InitFileInfo(std::wstring FilePath)
 
 void ParseBase::DatCollection()
 {
+    if (m_FileType != FILE_TYPE_X86_PE && m_FileType != FILE_TYPE_X64_PE)
+    {
+        std::wcout <<  L"数据信息获取失败,未知的文件格式" << std::endl;
+        return ;
+    }
+    //获取dosHeader;
+     m_pDosHeader = (IMAGE_DOS_HEADER*)m_pFileBuff;
+    //获取ntHeader
+     m_pNtHeader= Utils::GetPeNtheader(m_pFileBuff);
+    //获取fileheader
+     m_pFileHeader = (IMAGE_FILE_HEADER*)Utils::GetPeFileHeader(m_pFileBuff);
+    //获取OptionalHeader
+     m_pOptionalHeader = Utils::GetPeOptionalHeader(m_pFileBuff);
+    //获取sectionHeader
+     m_pSectionHeaders = (IMAGE_SECTION_HEADER*)Utils::GetPeSectionHeader(m_pFileBuff);
+
+
+
+
 }
 
 void ParseBase::DataParse()
 {
+
+
+
+
+
 }
 
 

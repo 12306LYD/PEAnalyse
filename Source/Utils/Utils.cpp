@@ -107,6 +107,34 @@ int Utils::FileInfoCheck(std::wstring FilePath)
     return is64Bit ? FILE_TYPE_X64_PE : FILE_TYPE_X86_PE;
 }
 
+int Utils::GetFileMachineType(LPVOID FileBuff)
+{
+    // 检查DOS头
+    PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)FileBuff;
+    if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
+        
+        return FILE_TYPE_NOT_PE;
+    }
+    // 获取NT头
+    PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)((BYTE*)FileBuff + pDosHeader->e_lfanew);
+    if (pNtHeaders->Signature != IMAGE_NT_SIGNATURE) {
+        return FILE_TYPE_NOT_PE;
+    }
+
+    // 判断是32位还是64位
+    if (pNtHeaders->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
+       
+        return FILE_TYPE_X64_PE;
+    }
+    else if (pNtHeaders->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
+        return FILE_TYPE_X86_PE;
+    }
+    else {
+        return FILE_TYPE_NOT_PE;
+    }
+    return 0;
+}
+
 LPVOID Utils::GetPeDosHeader(LPVOID FileBuff)
 {
     if (FileBuff==NULL)
@@ -131,9 +159,7 @@ LPVOID Utils::GetPeNtheader(LPVOID FileBuff)
     }
     // 获取NT头
     PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)((BYTE*)FileBuff + pDosHeader->e_lfanew);
-   
     return pNtHeaders;
-
 }
 
 LPVOID Utils::GetPeFileHeader(LPVOID FileBuff)
@@ -150,46 +176,47 @@ LPVOID Utils::GetPeFileHeader(LPVOID FileBuff)
         return NULL;
     }
     IMAGE_FILE_HEADER* FileHeader = &(pNtHeaders->FileHeader);
-
     return FileHeader;
 }
 
+LPVOID Utils::GetPeOptionalHeader(LPVOID FileBuff)
+{
+
+    // 判断是32位还是64位
+    int MachineType =  GetFileMachineType(FileBuff);
+    LPVOID pOptionalHeader = NULL;
+    if (MachineType== FILE_TYPE_X64_PE)
+    {
+        PIMAGE_NT_HEADERS64 pNtHeader = (PIMAGE_NT_HEADERS64)GetPeNtheader(FileBuff);
+        pOptionalHeader = &(pNtHeader->OptionalHeader);
+    }
+    else if (MachineType == FILE_TYPE_X86_PE)
+    {
+        PIMAGE_NT_HEADERS32 pNtHeader = (PIMAGE_NT_HEADERS32)GetPeNtheader(FileBuff);
+        pOptionalHeader = &(pNtHeader->OptionalHeader);
+    }
+    else {
+        return NULL;
+    }
+    return pOptionalHeader;
+}
+
+
+
+
 LPVOID Utils::GetPeSectionHeader(LPVOID FileBase)
 {
-    if (FileBase==NULL)
-    {
-        return NULL;
-    }
-    // 获取NT头
-    //先使用 PIMAGE_NT_HEADERS 获取信息 此时32 和64 位没有区别（未涉及到拓展头信息）
-    PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)GetPeNtheader(FileBase);
-    if (pNtHeaders==NULL)
-    {
-        return NULL;
-    }
-   
-    // 判断是32位还是64位
-    bool is64Bit = false;
-    if (pNtHeaders->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
-        is64Bit = true;
-    }
-    else if (pNtHeaders->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
-        is64Bit = false;
-    }
-    else
-    {
-        //位置的机器类型
-        return NULL;
-    }
-
+    
+    int MachineType = GetFileMachineType(FileBase);
     //获取拓展头数据大小 64和32位程序需要进行区分
     DWORD sizeOfOptionalHeader = 0;
     PIMAGE_SECTION_HEADER pSectionHeader = NULL;
-    if (is64Bit)
+    if (MachineType== FILE_TYPE_X64_PE)
     {
         //64位程序
+        PIMAGE_NT_HEADERS64 pNtHeaders = (PIMAGE_NT_HEADERS64)GetPeNtheader(FileBase);
         //先获取拓展头数据大小
-        sizeOfOptionalHeader = ((PIMAGE_NT_HEADERS64)pNtHeaders)->FileHeader.SizeOfOptionalHeader;
+        sizeOfOptionalHeader = pNtHeaders->FileHeader.SizeOfOptionalHeader;
         //再计算节区头位置
         pSectionHeader = (PIMAGE_SECTION_HEADER)(
             (BYTE*)pNtHeaders +
@@ -198,9 +225,10 @@ LPVOID Utils::GetPeSectionHeader(LPVOID FileBase)
             sizeOfOptionalHeader
             );
     }
-    else
+    else if (MachineType == FILE_TYPE_X86_PE)
     {
         //32位程序
+        PIMAGE_NT_HEADERS32 pNtHeaders = (PIMAGE_NT_HEADERS32)GetPeNtheader(FileBase);
         //先获取拓展头数据大小
         sizeOfOptionalHeader = ((PIMAGE_NT_HEADERS32)pNtHeaders)->FileHeader.SizeOfOptionalHeader;
         // 计算节区头位置
@@ -211,37 +239,30 @@ LPVOID Utils::GetPeSectionHeader(LPVOID FileBase)
             sizeOfOptionalHeader
             );
     }
-    
+    else
+    {
+        //未知的机器类型
+        return NULL;
+    }
+
     return pSectionHeader;
 }
 
 DWORD Utils::RvaToFoa(LPVOID FileBase, DWORD Rva)
 {
-    // 获取NT头
-   //先使用 PIMAGE_NT_HEADERS 获取信息 此时32 和64 位没有区别（未涉及到拓展头信息）
-    PIMAGE_NT_HEADERS pNtBase = (PIMAGE_NT_HEADERS)GetPeNtheader(FileBase);
-    if (pNtBase == NULL)
+   
+    int MachineType = GetFileMachineType(FileBase);
+    if (MachineType == FILE_TYPE_X64_PE)
     {
-        return 0;
+        PIMAGE_NT_HEADERS64 pNtHeader = (PIMAGE_NT_HEADERS64)GetPeNtheader(FileBase);
+        if (Rva < pNtHeader->OptionalHeader.SizeOfHeaders)
+        {
+            return Rva;
+        }
     }
-    // 判断是32位还是64位
-    bool is64Bit = false;
-    if (pNtBase->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
-        is64Bit = true;
-    }
-    else if (pNtBase->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
-        is64Bit = false;
-    }
-    else
+    else if (MachineType == FILE_TYPE_X86_PE)
     {
-        //位置的机器类型
-        return 0;
-    }
-    DWORD RetFoa = 0;
-    if (is64Bit)
-    {
-        //64位程序处理
-        PIMAGE_NT_HEADERS64 pNtHeader = (PIMAGE_NT_HEADERS64)(LPVOID)pNtBase;
+        PIMAGE_NT_HEADERS32 pNtHeader = (PIMAGE_NT_HEADERS32)GetPeNtheader(FileBase);
         if (Rva < pNtHeader->OptionalHeader.SizeOfHeaders)
         {
             return Rva;
@@ -249,20 +270,14 @@ DWORD Utils::RvaToFoa(LPVOID FileBase, DWORD Rva)
     }
     else
     {
-        //32位程序处理
-        PIMAGE_NT_HEADERS32 pNtHeader = (PIMAGE_NT_HEADERS32)(LPVOID)pNtBase;
-        if (Rva< pNtHeader->OptionalHeader.SizeOfHeaders)
-        {
-            return Rva;
-        }
+        //转换失败
+        return 0;
     }
-
     IMAGE_FILE_HEADER* pFileHeader= (IMAGE_FILE_HEADER*)GetPeFileHeader(FileBase);
     //获取区段数量
     DWORD SectionNum = pFileHeader->NumberOfSections;
     //获取指向sectionheader 的指针
     PIMAGE_SECTION_HEADER pSectionHeaders = (PIMAGE_SECTION_HEADER)GetPeSectionHeader(FileBase);
-
     for (size_t i = 0; i < SectionNum; i++)
     {
         uint32_t sectionStart = pSectionHeaders[i].VirtualAddress;
@@ -273,7 +288,6 @@ DWORD Utils::RvaToFoa(LPVOID FileBase, DWORD Rva)
             return pSectionHeaders[i].PointerToRawData + delta;
         }
     }
-
     //转换失败
     return 0;
 }

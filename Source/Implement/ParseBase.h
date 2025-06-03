@@ -31,13 +31,16 @@ public:
 	DWORD64 m_FileSize;
 	//保存读取文件内容的起始地址
 	LPVOID m_pFileBuff;
-
-
 private:
 	//保存指向Dos头的指针
 	IMAGE_DOS_HEADER* m_pDosHeader;
+
 	//保存指向NT头的指针(受目标文件32位还是64位影响 使用Lpvoid代替)
 	LPVOID m_pNtHeader;
+	//保存指向文件头的指针
+	IMAGE_FILE_HEADER* m_pFileHeader;
+	//保存指向拓展头的指针(受目标文件32位还是64位影响 使用Lpvoid代替)
+	LPVOID m_pOptionalHeader;
 	//保存指向SectionHeader首地址的指针
 	IMAGE_SECTION_HEADER* m_pSectionHeaders;
 

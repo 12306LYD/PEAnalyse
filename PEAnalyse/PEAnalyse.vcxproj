@@ -141,6 +141,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Source\Implement\ParseBase.h" />
+    <ClInclude Include="..\Source\Implement\PeStructAnalyse.h" />
     <ClInclude Include="..\Source\Utils\Utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
