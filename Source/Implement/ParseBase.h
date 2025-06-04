@@ -31,7 +31,7 @@ private:
 	void ParseExportTable();
 	void ParseImportTable();
 	void ParseRscTable();
-	void ParseRelocRable();
+	void ParseRelocTable();
 	void ParseTlsTable();
 	
 	//解析区段表

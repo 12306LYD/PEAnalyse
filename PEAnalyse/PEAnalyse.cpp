@@ -7,7 +7,10 @@ int main()
 {
     std::cout << "Hello World!\n";
 
-    std::wstring Path = L"C:\\Users\\12764\\Desktop\\34\\MyTest.exe";
+    
+   // std::wstring Path = L"C:\\Users\\12764\\source\\project\\MyFileMon\\Bin\\x64\\debug\\MyFileMon.dll";
+    std::wstring Path = L"C:\\Users\\12764\\source\\project\\MyFileMon\\Bin\\x86\\debug\\MyFileMon.dll";
+   
   
     ParseBase test;
     test.InitFileInfo(Path);

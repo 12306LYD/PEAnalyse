@@ -129,11 +129,11 @@ void ParseBase::DataParse()
         std::wcout << L"数据信息获取失败,未知的文件格式" << std::endl;
         return;
     }
-
-
      ParseDosHeader();
      ParseNtHeader();
+
      ParseDataDirectoryTable();
+
      ParseSectionHeaders();
  
     return;
@@ -251,35 +251,439 @@ void ParseBase::ParseNtHeader()
 
 void ParseBase::ParseDataDirectoryTable()
 {
-
-
+    ParseExportTable();
+    ParseImportTable();
+    ParseRscTable();
+    ParseTlsTable();
+    ParseRelocTable();
 
     return;
 }
 
 void ParseBase::ParseExportTable()
 {
+    //导出表在数据目录表的第一项索引为0
+    uint32_t ExportTableRVA = 0;
+    uint32_t ExportTableSize = 0;
+    //获取导入表 rva 和 size
+    if (m_FileType == FILE_TYPE_X64_PE)
+    {
+        //x64
+        IMAGE_OPTIONAL_HEADER64* pOptionalHeader = (IMAGE_OPTIONAL_HEADER64*)m_pOptionalHeader;
+        ExportTableRVA = pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+        ExportTableSize = pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
+    }
+    else
+    {
+        //x86
+        IMAGE_OPTIONAL_HEADER32* pOptionalHeader = (IMAGE_OPTIONAL_HEADER32*)m_pOptionalHeader;
+        ExportTableRVA = pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+        ExportTableSize = pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
+    }
+    // If there's no import directory, return
+    if (ExportTableRVA == 0 || ExportTableSize == 0)
+    {
+        printf("不存在导出表\n");
+        return;
+    }
+
+    //获取到导出表的指针
+    // 将Rva转成Foa
+    uint32_t exportDirOffset = Utils::RvaToFoa(m_pFileBuff, ExportTableRVA);
+    if (exportDirOffset == 0)
+    {
+        std::cerr << "Failed to convert export directory RVA to offset" << std::endl;
+        return;
+    }
+
+    //解析导出表
+    IMAGE_EXPORT_DIRECTORY* pExportDir = (IMAGE_EXPORT_DIRECTORY*)((uint8_t*)m_pFileBuff + exportDirOffset);
+
+    // 获取导出表各项数据
+    DWORD numberOfFunctions = pExportDir->NumberOfFunctions;
+    DWORD numberOfNames = pExportDir->NumberOfNames;
+    DWORD base = pExportDir->Base;
+
+    // 转换地址表RVA到FOA
+    uint32_t eatOffset = Utils::RvaToFoa(m_pFileBuff, pExportDir->AddressOfFunctions);
+    DWORD* pFunctions = (DWORD*)((uint8_t*)m_pFileBuff + eatOffset);
+
+    // 转换名称指针表RVA到FOA
+    uint32_t enptOffset = Utils::RvaToFoa(m_pFileBuff, pExportDir->AddressOfNames);
+    DWORD* pNames = (DWORD*)((uint8_t*)m_pFileBuff + enptOffset);
+
+    // 转换序号表RVA到FOA
+    uint32_t eotOffset = Utils::RvaToFoa(m_pFileBuff, pExportDir->AddressOfNameOrdinals);
+    WORD* pOrdinals = (WORD*)((uint8_t*)m_pFileBuff + eotOffset);
+
+    // 打印导出表基本信息
+    printf("\n========== Export Table ==========\n");
+    printf("Characteristics: 0x%08X\n", pExportDir->Characteristics);
+    printf("TimeDateStamp: 0x%08X\n", pExportDir->TimeDateStamp);
+    printf("MajorVersion: %d\n", pExportDir->MajorVersion);
+    printf("MinorVersion: %d\n", pExportDir->MinorVersion);
+    printf("Name RVA: 0x%08X\n", pExportDir->Name);
+    printf("Base: %d\n", base);
+    printf("NumberOfFunctions: %d\n", numberOfFunctions);
+    printf("NumberOfNames: %d\n", numberOfNames);
+
+    // 获取并打印DLL名称
+    uint32_t nameOffset = Utils::RvaToFoa(m_pFileBuff, pExportDir->Name);
+    if (nameOffset != 0)
+    {
+        printf("DLL Name: %s\n", (char*)((uint8_t*)m_pFileBuff + nameOffset));
+    }
+
+    // 打印导出函数信息
+    printf("\nExported Functions:\n");
+    printf("Ordinal  RVA      Name (if available)\n");
+    printf("------------------------------------\n");
+
+    for (DWORD i = 0; i < numberOfFunctions; i++)
+    {
+        DWORD functionRva = pFunctions[i];
+        if (functionRva == 0)
+            continue; // 跳过空项
+
+        // 检查是否为转发导出
+        if (functionRva >= ExportTableRVA && functionRva < ExportTableRVA + ExportTableSize)
+        {
+            uint32_t forwardOffset = Utils::RvaToFoa(m_pFileBuff, functionRva);
+            printf("%-8d 0x%08X (forwarded to %s)\n",
+                base + i, functionRva, (char*)((uint8_t*)m_pFileBuff + forwardOffset));
+        }
+        else
+        {
+            // 查找是否有名称
+            bool hasName = false;
+            const char* funcName = nullptr;
+            WORD ordinal = 0;
+
+            for (DWORD j = 0; j < numberOfNames; j++)
+            {
+                if (pOrdinals[j] == i)
+                {
+                    uint32_t nameRva = pNames[j];
+                    uint32_t nameOffset = Utils::RvaToFoa(m_pFileBuff, nameRva);
+                    funcName = (const char*)((uint8_t*)m_pFileBuff + nameOffset);
+                    ordinal = base + i;
+                    hasName = true;
+                    break;
+                }
+            }
+
+            if (hasName)
+            {
+                printf("%-8d 0x%08X %s\n", ordinal, functionRva, funcName);
+            }
+            else
+            {
+                printf("%-8d 0x%08X\n", base + i, functionRva);
+            }
+        }
+    }
+
     return;
+
 }
 
 void ParseBase::ParseImportTable()
 {
+    uint32_t importDirRVA = 0;
+    uint32_t importDirSize = 0;
+    // 获取导入表 rva 和 size
+    if (m_FileType == FILE_TYPE_X64_PE)
+    {
+        // x64
+        IMAGE_OPTIONAL_HEADER64* pOptionalHeader = (IMAGE_OPTIONAL_HEADER64*)m_pOptionalHeader;
+        importDirRVA = pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+        importDirSize = pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size;
+    }
+    else
+    {
+        // x86
+        IMAGE_OPTIONAL_HEADER32* pOptionalHeader = (IMAGE_OPTIONAL_HEADER32*)m_pOptionalHeader;
+        importDirRVA = pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+        importDirSize = pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size;
+    }
+    // If there's no import directory, return
+    if (importDirRVA == 0 || importDirSize == 0)
+    {
+        printf("不存在导入表\n");
+        return;
+    }
+    
+    // 将Rva转成Foa
+    uint32_t importDirOffset = Utils::RvaToFoa(m_pFileBuff, importDirRVA);
+    if (importDirOffset == 0)
+    {
+        std::cerr << "Failed to convert import directory RVA to offset" << std::endl;
+        return;
+    }
+
+    // 获取导入表目录指针
+    IMAGE_IMPORT_DESCRIPTOR* pImportDesc = (IMAGE_IMPORT_DESCRIPTOR*)((uint8_t*)m_pFileBuff + importDirOffset);
+
+    printf("\n========== Import Table ==========\n");
+
+    // 遍历所有导入的DLL
+    while (pImportDesc->OriginalFirstThunk != 0 || pImportDesc->FirstThunk != 0)
+    {
+        // 获取DLL名称
+        uint32_t dllNameOffset = Utils::RvaToFoa(m_pFileBuff, pImportDesc->Name);
+        if (dllNameOffset == 0)
+        {
+            std::cerr << "Invalid DLL name RVA" << std::endl;
+            pImportDesc++;
+            continue;
+        }
+        const char* dllName = (const char*)((uint8_t*)m_pFileBuff + dllNameOffset);
+        printf("\nDLL: %s\n", dllName);
+
+        // 决定使用OriginalFirstThunk还是FirstThunk（通常两者相同）
+        uint32_t thunkRVA = pImportDesc->OriginalFirstThunk ? pImportDesc->OriginalFirstThunk : pImportDesc->FirstThunk;
+        uint32_t thunkOffset = Utils::RvaToFoa(m_pFileBuff, thunkRVA);
+        if (thunkOffset == 0)
+        {
+            std::cerr << "Invalid thunk RVA" << std::endl;
+            pImportDesc++;
+            continue;
+        }
+
+        printf("  Ordinal/Hint  Name\n");
+        printf("  ----------------------------\n");
+
+        // 区分32位和64位的导入表项
+        if (m_FileType == FILE_TYPE_X64_PE)
+        {
+            // 64位处理
+            IMAGE_THUNK_DATA64* pThunk64 = (IMAGE_THUNK_DATA64*)((uint8_t*)m_pFileBuff + thunkOffset);
+            while (pThunk64->u1.AddressOfData != 0)
+            {
+                if (pThunk64->u1.Ordinal & IMAGE_ORDINAL_FLAG64)
+                {
+                    // 按序号导入
+                    uint32_t ordinal = static_cast<uint32_t>(pThunk64->u1.Ordinal & 0xFFFF);
+                    printf("  %08X       (Ordinal)\n", ordinal);
+                }
+                else
+                {
+                    // 按名称导入
+                    uint32_t nameRVA = static_cast<uint32_t>(pThunk64->u1.AddressOfData);
+                    uint32_t nameOffset = Utils::RvaToFoa(m_pFileBuff, nameRVA);
+                    if (nameOffset != 0)
+                    {
+                        IMAGE_IMPORT_BY_NAME* pImportName = (IMAGE_IMPORT_BY_NAME*)((uint8_t*)m_pFileBuff + nameOffset);
+                        printf("  %04X         %s\n", pImportName->Hint, pImportName->Name);
+                    }
+                }
+
+                // 显示IAT信息（如果可用）
+                if (pImportDesc->FirstThunk != 0)
+                {
+                    uint32_t iatOffset = Utils::RvaToFoa(m_pFileBuff, pImportDesc->FirstThunk +
+                        (uint32_t)((uint8_t*)pThunk64 - (uint8_t*)((uint8_t*)m_pFileBuff + thunkOffset)));
+                    if (iatOffset != 0)
+                    {
+                        IMAGE_THUNK_DATA64* pIatEntry = (IMAGE_THUNK_DATA64*)((uint8_t*)m_pFileBuff + iatOffset);
+                        printf("    [IAT] RVA: 0x%016llX\n", pIatEntry->u1.AddressOfData);
+                    }
+                }
+
+                pThunk64++;
+            }
+        }
+        else
+        {
+            // 32位处理
+            IMAGE_THUNK_DATA32* pThunk32 = (IMAGE_THUNK_DATA32*)((uint8_t*)m_pFileBuff + thunkOffset);
+            while (pThunk32->u1.AddressOfData != 0)
+            {
+                if (pThunk32->u1.Ordinal & IMAGE_ORDINAL_FLAG32)
+                {
+                    // 按序号导入
+                    uint32_t ordinal = pThunk32->u1.Ordinal & 0xFFFF;
+                    printf("  %08X       (Ordinal)\n", ordinal);
+                }
+                else
+                {
+                    // 按名称导入
+                    uint32_t nameRVA = pThunk32->u1.AddressOfData;
+                    uint32_t nameOffset = Utils::RvaToFoa(m_pFileBuff, nameRVA);
+                    if (nameOffset != 0)
+                    {
+                        IMAGE_IMPORT_BY_NAME* pImportName = (IMAGE_IMPORT_BY_NAME*)((uint8_t*)m_pFileBuff + nameOffset);
+                        printf("  %04X         %s\n", pImportName->Hint, pImportName->Name);
+                    }
+                }
+
+                // 显示IAT信息（如果可用）
+                if (pImportDesc->FirstThunk != 0)
+                {
+                    uint32_t iatOffset = Utils::RvaToFoa(m_pFileBuff, pImportDesc->FirstThunk +
+                        (uint32_t)((uint8_t*)pThunk32 - (uint8_t*)((uint8_t*)m_pFileBuff + thunkOffset)));
+                    if (iatOffset != 0)
+                    {
+                        IMAGE_THUNK_DATA32* pIatEntry = (IMAGE_THUNK_DATA32*)((uint8_t*)m_pFileBuff + iatOffset);
+                        printf("    [IAT] RVA: 0x%08X\n", pIatEntry->u1.AddressOfData);
+                    }
+                }
+
+                pThunk32++;
+            }
+        }
+
+        pImportDesc++;
+    }
+
+
     return;
 }
+
+
+
 
 void ParseBase::ParseRscTable()
 {
+    //解析资源表
     return;
 }
 
-void ParseBase::ParseRelocRable()
+void ParseBase::ParseRelocTable()
 {
-    return;
+    uint32_t relocRVA = 0;
+    uint32_t relocSize = 0;
+
+    if (m_FileType == FILE_TYPE_X64_PE) {
+        IMAGE_OPTIONAL_HEADER64* pOptHeader = (IMAGE_OPTIONAL_HEADER64*)m_pOptionalHeader;
+        relocRVA = pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress;
+        relocSize = pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
+    }
+    else {
+        IMAGE_OPTIONAL_HEADER32* pOptHeader = (IMAGE_OPTIONAL_HEADER32*)m_pOptionalHeader;
+        relocRVA = pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress;
+        relocSize = pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
+    }
+
+    if (relocRVA == 0 || relocSize == 0) {
+        printf("无重定位表\n");
+        return;
+    }
+
+    uint32_t relocOffset = Utils::RvaToFoa(m_pFileBuff, relocRVA);
+    if (relocOffset == 0) {
+        std::cerr << "重定位表RVA转换失败" << std::endl;
+        return;
+    }
+
+    printf("\n========== Relocation Table ==========\n");
+
+    IMAGE_BASE_RELOCATION* pRelocBlock = (IMAGE_BASE_RELOCATION*)((uint8_t*)m_pFileBuff + relocOffset);
+    DWORD totalSize = 0;
+
+    while (totalSize < relocSize && pRelocBlock->SizeOfBlock > 0) {
+        printf("Page RVA: 0x%08X, Block Size: %d\n",
+            pRelocBlock->VirtualAddress, pRelocBlock->SizeOfBlock);
+
+        DWORD entryCount = (pRelocBlock->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(WORD);
+        WORD* pEntries = (WORD*)(pRelocBlock + 1);
+
+        for (DWORD i = 0; i < entryCount; i++) {
+            WORD entry = pEntries[i];
+            if (entry == 0) continue;
+
+            BYTE type = entry >> 12;
+            WORD offset = entry & 0xFFF;
+
+            const char* typeStr = "UNKNOWN";
+            switch (type) {
+            case IMAGE_REL_BASED_ABSOLUTE: typeStr = "ABS"; break;
+            case IMAGE_REL_BASED_HIGHLOW: typeStr = "HIGHLOW"; break;
+            case IMAGE_REL_BASED_DIR64: typeStr = "DIR64"; break;
+            case IMAGE_REL_BASED_HIGH: typeStr = "HIGH"; break;
+            case IMAGE_REL_BASED_LOW: typeStr = "LOW"; break;
+            }
+
+            printf("  [%04d] Offset: 0x%04X, Type: %s\n",
+                i, offset, typeStr);
+        }
+
+        totalSize += pRelocBlock->SizeOfBlock;
+        pRelocBlock = (IMAGE_BASE_RELOCATION*)((uint8_t*)pRelocBlock + pRelocBlock->SizeOfBlock);
+    }
 }
 
 void ParseBase::ParseTlsTable()
 {
-    return;
+    uint32_t tlsRVA = 0;
+    uint32_t tlsSize = 0;
+
+    if (m_FileType == FILE_TYPE_X64_PE) {
+        IMAGE_OPTIONAL_HEADER64* pOptHeader = (IMAGE_OPTIONAL_HEADER64*)m_pOptionalHeader;
+        tlsRVA = pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress;
+        tlsSize = pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size;
+    }
+    else {
+        IMAGE_OPTIONAL_HEADER32* pOptHeader = (IMAGE_OPTIONAL_HEADER32*)m_pOptionalHeader;
+        tlsRVA = pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress;
+        tlsSize = pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size;
+    }
+
+    if (tlsRVA == 0 || tlsSize == 0) {
+        printf("无TLS表\n");
+        return;
+    }
+
+    uint32_t tlsOffset = Utils::RvaToFoa(m_pFileBuff, tlsRVA);
+    if (tlsOffset == 0) {
+        std::cerr << "TLS表RVA转换失败" << std::endl;
+        return;
+    }
+
+    printf("\n========== TLS Table ==========\n");
+
+    if (m_FileType == FILE_TYPE_X64_PE) {
+        IMAGE_TLS_DIRECTORY64* pTls = (IMAGE_TLS_DIRECTORY64*)((uint8_t*)m_pFileBuff + tlsOffset);
+        printf("StartAddressOfRawData: 0x%016llX\n", pTls->StartAddressOfRawData);
+        printf("EndAddressOfRawData:   0x%016llX\n", pTls->EndAddressOfRawData);
+        printf("AddressOfIndex:        0x%016llX\n", pTls->AddressOfIndex);
+        printf("AddressOfCallBacks:    0x%016llX\n", pTls->AddressOfCallBacks);
+        printf("SizeOfZeroFill:        %u\n", pTls->SizeOfZeroFill);
+        printf("Characteristics:       0x%08X\n", pTls->Characteristics);
+
+        // 解析TLS回调函数
+        if (pTls->AddressOfCallBacks != 0) {
+            uint32_t cbOffset = Utils::RvaToFoa(m_pFileBuff, (uint32_t)pTls->AddressOfCallBacks);
+            if (cbOffset != 0) {
+                printf("\nTLS Callbacks:\n");
+                ULONGLONG* pCallbacks = (ULONGLONG*)((uint8_t*)m_pFileBuff + cbOffset);
+                for (int i = 0; pCallbacks[i] != 0; i++) {
+                    printf("  [%d] RVA: 0x%016llX\n", i, pCallbacks[i]);
+                }
+            }
+        }
+    }
+    else {
+        IMAGE_TLS_DIRECTORY32* pTls = (IMAGE_TLS_DIRECTORY32*)((uint8_t*)m_pFileBuff + tlsOffset);
+        printf("StartAddressOfRawData: 0x%08X\n", pTls->StartAddressOfRawData);
+        printf("EndAddressOfRawData:   0x%08X\n", pTls->EndAddressOfRawData);
+        printf("AddressOfIndex:        0x%08X\n", pTls->AddressOfIndex);
+        printf("AddressOfCallBacks:    0x%08X\n", pTls->AddressOfCallBacks);
+        printf("SizeOfZeroFill:        %u\n", pTls->SizeOfZeroFill);
+        printf("Characteristics:       0x%08X\n", pTls->Characteristics);
+
+        // 解析TLS回调函数
+        if (pTls->AddressOfCallBacks != 0) {
+            uint32_t cbOffset = Utils::RvaToFoa(m_pFileBuff, pTls->AddressOfCallBacks);
+            if (cbOffset != 0) {
+                printf("\nTLS Callbacks:\n");
+                DWORD* pCallbacks = (DWORD*)((uint8_t*)m_pFileBuff + cbOffset);
+                for (int i = 0; pCallbacks[i] != 0; i++) {
+                    printf("  [%d] RVA: 0x%08X\n", i, pCallbacks[i]);
+                }
+            }
+        }
+    }
 }
 
 void ParseBase::ParseSectionHeaders()
