@@ -304,7 +304,64 @@ IMAGE_IMPORT_DESCRIPTOR 包含两个 IMAGE_THUNK_DATA 数组，数组中的每�
 
 
 
+数据目录表第六项索引包含重定位表的相关信息
+如：
+IMAGE_DATA_DIRECTORY DataDirectory;
+ DataDirectory[5].VirtualAddress   表示重定位表的RVA
+ DataDirectory[5].Size             
 
+ DataDirectory[5].VirtualAddress 是指向程序重定位数据的Rva 这块内存包含若干个重定位块,每个重定位块中包含了若干个需要重定位的数据信息
+    格式如：
+        Reloc[0]    第1个重定位块
+        Reloc[1]    第2个重定位块
+        Reloc[2]    第3个重定位块
+        Reloc[3]    第4个重定位块
+        Reloc[4]    第5个重定位块
+       .......
+       每个重定位块存放着 4KB(一页0x1000) 大小的重定位信息，每个重定位数据块的大小必须以 DWORD 对齐。
+       重定位块以一个 IMAGE_BASE_RELOCATION 结构作为开始，这里需要注意这个重定位块不是IMAGE_BASE_RELOCATION类型的结构体，只是以IMAGE_BASE_RELOCATION类型的结构体作为起始，后面还有其他数据，
+       其结构体如下：
+
+    typedef struct _IMAGE_BASE_RELOCATION {
+         DWORD    VirtualAddress;  // 指向需要重定位页的 RVA
+         DWORD    SizeOfBlock;     // 当前重定位块的大小
+        //WORD    TypeOffset;      // 重定位的数据信息 (这个成员实际上不是_IMAGE_BASE_RELOCATION结构体的成员)
+                                   // 是一个数组 数组中每个元素大小为 2 个字节，即 16 位。包含两部分数据
+                                   //  type 高 4 位用于表示重定位的类型。当此标记为0011（3）时低12为才有效，否则该2个字节可能是为了对齐而产生的，并且为对齐而产生的字节其值全为0。
+                                   //  offset 低 12 位用于表示重定位数据位置相对于页 RVA 的偏移量。
+                                  
+       } _IMAGE_BASE_RELOCATION;
+typedef IMAGE_BASE_RELOCATION UNALIGNED * PIMAGE_BASE_RELOCATION;
+
+接下来详细说明一下结构体中的成员：
+
+VirtualAddress 重定位页 RVA。以映像装载基址加上页 RVA 的和作为被加数，再加上重定位项对应的 offset 就能得到其在内存中实际的 VA。
+最后一个重定位块的尾部也会添加一个 virtualaddress 字段作为结束标志。
+
+SizeOfBlock 基址重定位块的大小。包括 VirtualAddress，SizeOfBlock，以及后面 TypeOffset 的大小。
+TypeOffset 一个数组。数组中每个元素大小为 2 个字节，即 16 位。
+type 高 4 位用于表示重定位的类型。
+offset 低 12 位用于表示重定位数据位置相对于页 RVA 的偏移量。与 VirtualAddress 相加就是要修改的重定位数据的指针，再加上映像装载基址就是修改后的指针。
+
+
+重定位过程 
+利用重定位表定位需要修改的地址。比如在 me.dll 中，重定位表的开头部分如下：
+
+
+RVA       Data      Description
+00005000  00001000  页 RVA        // page RVA = 0x1000
+00005004  00000118  重定位块大小 size
+00005008      3013  Type|Offset   //   offset = 0x013
+...
+由 0x1000+0x013 算出待重定位的数据在文件偏移 0x1013 处，加上默认的 imagebase 就是 0x10001013。如下：
+
+
+.text:10001012 68 9C 20 00 10        push 1000209C
+即，文件偏移 0x1013 处的 1000209C 可能需要重定位。
+
+
+由于重定位表的SizeOfBlock大小不确定，新的Block的重定位信息的结构体接着上一个Block4字节对齐后开始，
+而当出现一个_IMAGE_BASE_RELOCATION结构体的值全为0时，表明重定位表结束
 
 
 */
